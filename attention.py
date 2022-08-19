@@ -26,20 +26,20 @@ class MultiHeadAttention(nn.Module):
         ) # Mask buffer for masking attention
 
     def forward(self, x):
-        batch_size, seq_len = x.shape
+        batch_size, seq_len = x.size(0), x.size(1)
 
         # Reshaping query, key and value vectors for different attention heads
-        query = self.query(x).reshape(batch_size, seq_len, self.num_heads, -1).transpose(1, 2)
-        key = self.key(x).reshape(batch_size, seq_len, self.num_heads, -1).transpose(1, 2)
-        value = self.value.reshape(batch_size, seq_len, self.num_heads, -1).transpose(1, 2)
+        query_rshp = self.query(x).reshape(batch_size, seq_len, self.num_heads, -1).transpose(1, 2)
+        key_rshp = self.key(x).reshape(batch_size, seq_len, self.num_heads, -1).transpose(1, 2)
+        value_rshp = self.value(x).reshape(batch_size, seq_len, self.num_heads, -1).transpose(1, 2)
 
         # Scaled Dot Product Attention but adapted masking
-        attn = torch.matmul((query, key.transpose(-2, -1))/math.sqrt(key.size(-1))) #Q.Kt/root(dmodel)
+        attn = (query_rshp @ key_rshp.transpose(-2, -1)) * (1.0 / math.sqrt(key_rshp.size(-1))) #Q.Kt/root(dmodel)
         mask = self.mask[:, :, :seq_len, :seq_len] # mask
         attn_masked = attn.masked_fill(mask==0, float("-inf")) # fill attention with mask
         attn_dropped = self.attn_dropout(attn_masked) # perform dropout on attention
         attn_weights = F.softmax(attn_dropped, dim=-1) # softmax(attention) to get attention weights
-        attn_score = torch.matmul(attn_weights, value) # attention score = softmax(attention_score)*value
+        attn_score = torch.matmul(attn_weights, value_rshp) # attention score = softmax(attention_score)*value
 
         # Pass the attention to a FFN where all the attention from different heads are concatenated
         concat_attn_inp = attn_score.transpose(1, 2)
